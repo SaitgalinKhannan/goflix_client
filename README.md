@@ -1,38 +1,39 @@
-# sv
+# Goflix
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+Netflix-like streaming service powered by torrents. Download and stream movies directly through your browser.
 
-## Creating a project
+## Features
 
-If you're seeing this, you've probably already done this step. Congrats!
+- 🎬 **Torrent Integration** - Add movies via magnet links
+- 📁 **File Browser** - Navigate and explore downloaded content
+- 📊 **Real-time Progress** - Live download status via WebSocket
+- 🎯 **Simple UI** - Clean, responsive interface
 
-```sh
-# create a new project in the current directory
-npx sv create
+## Tech Stack
 
-# create a new project in my-app
-npx sv create my-app
+- **Frontend**: SvelteKit + TypeScript
+- **Backend**: Go server (separate repository)
+- **Real-time**: WebSocket connections
+
+## Setup
+
+1. Install dependencies:
+```bash
+npm install
 ```
 
-## Developing
-
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
-
-```sh
+2. Start development server:
+```bash
 npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
 ```
 
-## Building
+3. Make sure your Go backend is running on `localhost:8080`
 
-To create a production version of your app:
+## Usage
 
-```sh
-npm run build
-```
+1. **Add Torrents** - Paste magnet links on the `/torrent` page
+2. **Monitor Downloads** - Watch real-time progress updates
+3. **Browse Files** - Navigate downloaded content on the `/files` page
+4. **Stream Content** - Play your downloaded movies
 
-You can preview the production build with `npm run preview`.
-
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+*Built for only*

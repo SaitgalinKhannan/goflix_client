@@ -1,18 +1,18 @@
 <script lang="ts">
 	import { API_URL } from '$lib/config/api';
-
-	interface File {
-		name: string;
-		path: string;
-		isDir: boolean;
-		size?: number;
-		children?: File[];
-	}
+	import { API_ENDPOINTS } from '$lib/utils/constants';
+	import type { File } from '$lib/types';
+	import { onMount } from 'svelte';
 
 	let currentPath = $state('/');
 	let files: File[] = $state([]);
 	let isLoading: boolean = $state(true);
 	let error: string | null = $state(null);
+
+	onMount(() => {
+		const params = new URLSearchParams(window.location.search);
+		currentPath = decodeURIComponent(params.get('path') || '/');
+	});
 
 	// Загрузка существующих торрентов при инициализации
 	async function loadFiles() {
@@ -20,7 +20,7 @@
 			isLoading = true;
 			error = null;
 
-			const response = await fetch(`${API_URL}/api/files?path=${currentPath}`);
+			const response = await fetch(API_URL + API_ENDPOINTS.FILES(currentPath));
 
 			if (!response.ok) {
 				console.error(`Failed to load files: ${response.status}`);
@@ -41,22 +41,11 @@
 		}
 	}
 
-	// Функция для нормализации пути
-	function normalizePath(path: string): string {
-		if (!path || path === '/') return '/';
-
-		// Убираем множественные слеши и нормализуем
-		const normalized = path.replace(/\/+/g, '/');
-
-		// Убеждаемся что путь начинается с / и не заканчивается на / (кроме корня)
-		const withLeadingSlash = normalized.startsWith('/') ? normalized : '/' + normalized;
-		return withLeadingSlash.length > 1 && withLeadingSlash.endsWith('/')
-			? withLeadingSlash.slice(0, -1)
-			: withLeadingSlash;
-	}
-
 	function goBack() {
-		if (currentPath === '/') return;
+		/*if (currentPath === '/') {
+			window.location.href = '/';
+			return;
+		}
 
 		const parts = currentPath.split('/').filter(Boolean);
 		parts.pop();
@@ -66,11 +55,19 @@
 			currentPath = '/';
 		} else {
 			currentPath = '/' + parts.join('/');
-		}
+		}*/
+		window.history.back();
 	}
 
 	function navigateToFolder(folderPath: string) {
-		currentPath = normalizePath(folderPath);
+		//currentPath = normalizeFilePath(folderPath);
+			window.location.href = `/files?path=${encodeURIComponent(folderPath)}`
+	}
+
+	// Функция для проверки, является ли файл видео файлом
+	function isVideoFile(filename: string): boolean {
+		const videoExtensions = ['.mp4', '.mkv', '.avi', '.mov', '.webm', '.m3u8'];
+		return videoExtensions.some(ext => filename.toLowerCase().endsWith(ext));
 	}
 
 	$effect(() => {
@@ -80,7 +77,7 @@
 
 <svelte:head>
 	<title>Files</title>
-	<meta name="description" content="Filest" />
+	<meta name="description" content="Files" />
 </svelte:head>
 
 <div>
@@ -105,6 +102,9 @@
 				onclick={() => {
 					if (file.isDir) {
 						navigateToFolder(file.path);
+					} else if (isVideoFile(file.name)) { // Если mkv, mp4 или другое видео.
+						// Перенаправляем на страницу плеера с передачей пути к файлу
+						window.location.href = `/player?path=${encodeURIComponent(file.path)}`;
 					}
 				}}
 			>

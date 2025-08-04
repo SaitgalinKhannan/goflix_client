@@ -1,15 +1,9 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
 	import { API_URL, WS_URL } from '$lib/config/api';
-
-	interface Torrent {
-		infoHash: string;
-		name: string;
-		magnet: string;
-		size: number;
-		done: boolean;
-		downloadedPercent: number;
-	}
+	import { API_ENDPOINTS } from '$lib/utils/constants';
+	import type { Torrent } from '$lib/types';
+	import { convertingStateToString, stateToString } from '$lib/utils/mappers';
 
 	let magnet: string = $state('');
 	let torrents: Torrent[] = $state([]);
@@ -17,13 +11,36 @@
 	let error: string | null = $state(null);
 	let ws: WebSocket | null = null;
 
+	let sortBy = $state<'name' | 'infoHash' | 'progress'>('infoHash');
+	let sortOrder = $state<'asc' | 'desc'>('asc');
+
+	const sortedTorrents = $derived(
+		torrents.toSorted((a, b) => {
+			let result = 0;
+
+			switch (sortBy) {
+				case 'name':
+					result = (a.name || a.infoHash).localeCompare(b.name || b.infoHash);
+					break;
+				case 'progress':
+					result = a.downloadedPercent - b.downloadedPercent;
+					break;
+				case 'infoHash':
+				default:
+					result = a.infoHash.localeCompare(b.infoHash);
+			}
+
+			return sortOrder === 'desc' ? -result : result;
+		})
+	);
+
 	// Загрузка существующих торрентов при инициализации
 	async function loadTorrents() {
 		try {
 			isLoading = true;
 			error = null;
 
-			const response = await fetch(`${API_URL}/api/torrents/all`);
+			const response = await fetch(API_URL + API_ENDPOINTS.TORRENTS);
 
 			if (!response.ok) {
 				console.error(`Failed to load torrents: ${response.status}`);
@@ -49,7 +66,7 @@
 		if (!magnet.trim()) return;
 
 		try {
-			const response = await fetch(`${API_URL}/api/torrents/add`, {
+			const response = await fetch(API_URL + API_ENDPOINTS.ADD_TORRENT, {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json'
@@ -120,6 +137,7 @@
 </svelte:head>
 
 <div class="add-form">
+	<button onclick={() => window.location.href = "/"}>Back</button>
 	<input
 		type="text"
 		placeholder="Enter magnet link"
@@ -134,16 +152,18 @@
 		{error}
 		<button onclick={loadTorrents}>Retry</button>
 	</div>
-{:else if torrents.length === 0}
+{:else if sortedTorrents.length === 0}
 	<p>No torrents added yet.</p>
 {:else}
-	{#each torrents as t (t.infoHash)}
+	{#each sortedTorrents as t (t.infoHash)}
 		<div class="torrent">
 			<strong>{t.name || t.infoHash}</strong>
 			<div class="progress-bar">
 				<div class="progress" style="width: {Math.round(t.downloadedPercent)}%"></div>
 			</div>
 			<small>{Math.round(t.downloadedPercent)}% - {(t.size / 1024 / 1024).toFixed(1) + ' MB'}</small>
+			<small>{stateToString(t.state)}</small>
+			<small>{convertingStateToString(t.convertingState)}</small>
 		</div>
 	{/each}
 {/if}

@@ -161,7 +161,7 @@
 			<div class="progress-bar">
 				<div class="progress" style="width: {Math.round(t.downloadedPercent)}%"></div>
 			</div>
-			<small>{Math.round(t.downloadedPercent)}% - {(t.size / 1024 / 1024).toFixed(1) + ' MB'}</small>
+			<small>{t.downloadedPercent.toFixed(2)}% - {(t.size / 1024 / 1024).toFixed(1) + ' MB'}</small>
 			<small>{stateToString(t.state)}</small>
 			<small>{convertingStateToString(t.convertingState)}</small>
 		</div>

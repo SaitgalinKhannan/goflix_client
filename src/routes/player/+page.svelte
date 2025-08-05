@@ -9,6 +9,11 @@
 	let isLoading = $state(true);
 	let error: string | null = $state(null);
 	let videoPath: string = $state('');
+	let isPlaying = $state(false);
+	let currentTime = $state(0);
+	let duration = $state(0);
+	let isMuted = $state(false);
+	let volume = $state(0.7);
 	let isFullscreen = $state(false);
 	let showControls = $state(true);
 	let controlsTimeout: number;
@@ -20,37 +25,43 @@
 
 	const initPlayer = () => {
 		if (!videoElement) return;
-
 		// Проверяем поддержку HLS
 		if (Hls.isSupported()) {
 			hls = new Hls({
+				// Конфигурация для работы с вашим сервером
 				xhrSetup: (xhr, url) => {
+					// Модифицируем URL для сегментов
 					const originalUrl = new URL(url);
 					const pathname = originalUrl.pathname;
+					// Если это запрос сегмента (содержит .ts), то добавляем папку фильма
 					if (pathname.includes('.ts')) {
 						const segmentName = pathname.split('/').pop();
 						const filmName = videoPath.replace('.m3u8', '');
 						const segmentPath = `${filmName}/${segmentName}`;
+						// Заменяем URL на наш API endpoint
 						xhr.open('GET', createVideoUrl(segmentPath), true);
 						return;
 					}
+					// Для m3u8 файлов используем обычный запрос
 					xhr.open('GET', url, true);
 				},
+				// Дополнительные настройки
 				enableWorker: true,
 				lowLatencyMode: false,
 				backBufferLength: 90
 			});
-
+			// Загружаем основной m3u8 файл
 			const masterPlaylistUrl = createVideoUrl(videoPath);
 			hls.loadSource(masterPlaylistUrl);
 			hls.attachMedia(videoElement);
-
+			// Обработчики событий
 			hls.on(Hls.Events.MANIFEST_PARSED, () => {
 				console.log('Манифест загружен');
 				isLoading = false;
+				setupVideoEvents(); // Добавляем установку обработчиков
+				setTimeout(() => showControls = false, 3000);
 			});
-
-			hls.on(Hls.Events.ERROR, (event, data) => {
+			hls.on(Hls.Events.ERROR, (_, data) => {
 				console.error('HLS ошибка:', data);
 				if (data.fatal) {
 					switch (data.type) {
@@ -71,6 +82,7 @@
 				}
 			});
 		} else if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
+			// Нативная поддержка HLS (Safari)
 			videoElement.src = createVideoUrl(videoPath);
 			isLoading = false;
 		} else {
@@ -86,49 +98,6 @@
 		}
 	};
 
-	const goBack = () => {
-		if (window.history.length > 1) {
-			window.history.back();
-		} else {
-			window.location.href = '/';
-		}
-	};
-
-	const toggleFullscreen = () => {
-		const container = document.querySelector('.video-container') as HTMLElement;
-
-		if (!document.fullscreenElement) {
-			container.requestFullscreen().then(() => {
-				isFullscreen = true;
-			}).catch(() => {
-				console.log('Fullscreen not supported');
-			});
-		} else {
-			document.exitFullscreen().then(() => {
-				isFullscreen = false;
-			});
-		}
-	};
-
-	const handleMouseMove = () => {
-		showControls = true;
-		clearTimeout(controlsTimeout);
-
-		if (!isLoading && !error) {
-			controlsTimeout = setTimeout(() => {
-				if (!videoElement?.paused) {
-					showControls = false;
-				}
-			}, 3000);
-		}
-	};
-
-	const handleMouseLeave = () => {
-		if (!videoElement?.paused && !isLoading && !error) {
-			showControls = false;
-		}
-	};
-
 	// Переинициализация при изменении пути к видео
 	$effect(() => {
 		if (videoPath && videoElement) {
@@ -141,439 +110,443 @@
 		}
 	});
 
+	// Форматирование времени
+	const formatTime = (seconds: number): string => {
+		const min = Math.floor(seconds / 60);
+		const sec = Math.floor(seconds % 60);
+		return `${min}:${sec < 10 ? '0' : ''}${sec}`;
+	};
+
+	// Переключение воспроизведения
+	const togglePlay = () => {
+		if (isPlaying) {
+			videoElement.pause();
+		} else {
+			videoElement.play().catch(e => console.error('Play error:', e));
+		}
+		isPlaying = !isPlaying;
+		resetControlsTimer();
+	};
+
+	// Переключение звука
+	const toggleMute = () => {
+		isMuted = !isMuted;
+		videoElement.muted = isMuted;
+		resetControlsTimer();
+	};
+
+	// Переключение полноэкранного режима
+	const toggleFullscreen = () => {
+		if (!document.fullscreenElement) {
+			videoElement.parentElement?.requestFullscreen().catch(console.error);
+			isFullscreen = true;
+		} else {
+			document.exitFullscreen();
+			isFullscreen = false;
+		}
+		resetControlsTimer();
+	};
+
+	// Обновление позиции видео
+	const updateProgress = (e: Event) => {
+		const target = e.target as HTMLInputElement;
+		const time = (parseFloat(target.value) / 100) * duration;
+		videoElement.currentTime = time;
+		currentTime = time;
+		resetControlsTimer();
+	};
+
+	// Обновление громкости
+	const updateVolume = (e: Event) => {
+		const target = e.target as HTMLInputElement;
+		volume = parseFloat(target.value);
+		videoElement.volume = volume;
+		resetControlsTimer();
+	};
+
+	// Сброс таймера скрытия контролов
+	const resetControlsTimer = () => {
+		showControls = true;
+		clearTimeout(controlsTimeout);
+		controlsTimeout = setTimeout(() => showControls = false, 3000);
+	};
+
+	// Обработчики событий видео
+	const setupVideoEvents = () => {
+		if (!videoElement) return;
+
+		videoElement.ontimeupdate = () => {
+			currentTime = videoElement.currentTime;
+			duration = videoElement.duration || 0;
+		};
+
+		videoElement.onplay = () => isPlaying = true;
+		videoElement.onpause = () => isPlaying = false;
+		videoElement.onvolumechange = () => {
+			volume = videoElement.volume;
+			isMuted = videoElement.muted;
+		};
+
+		videoElement.onclick = () => togglePlay();
+		videoElement.onmousemove = resetControlsTimer;
+		videoElement.ontouchstart = resetControlsTimer;
+
+		// Инициализация громкости
+		videoElement.volume = volume;
+	};
+
 	onMount(() => {
 		const params = new URLSearchParams(window.location.search);
 		videoPath = decodeURIComponent(params.get('path') || '/');
 		initPlayer();
 
-		// Слушаем изменения fullscreen
 		document.addEventListener('fullscreenchange', () => {
 			isFullscreen = !!document.fullscreenElement;
 		});
 	});
-
 	onDestroy(() => {
 		destroyPlayer();
-		clearTimeout(controlsTimeout);
 	});
 </script>
 
-<div
-	class="video-container"
-	class:fullscreen={isFullscreen}
-	onmousemove={handleMouseMove}
-	onmouseleave={handleMouseLeave}
->
-	<!-- Кнопка назад -->
-	<button
-		class="back-button"
-		class:show={showControls || isLoading || error}
-		onclick={goBack}
-		aria-label="Назад"
-	>
-		<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-			<path d="m15 18-6-6 6-6"/>
-		</svg>
-		<span class="back-text">Назад</span>
-	</button>
-
-	<!-- Кнопка полноэкранного режима -->
-	{#if !isLoading && !error}
-		<button
-			class="fullscreen-button"
-			class:show={showControls}
-			onclick={toggleFullscreen}
-			aria-label={isFullscreen ? 'Выйти из полноэкранного режима' : 'Полноэкранный режим'}
-		>
-			{#if isFullscreen}
-				<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-					<path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/>
-				</svg>
-			{:else}
-				<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-					<path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
-				</svg>
-			{/if}
-		</button>
-	{/if}
-
-	<!-- Состояние загрузки -->
+<div class="video-container" class:fullscreen={isFullscreen}>
 	{#if isLoading}
 		<div class="loading">
-			<div class="loading-content">
-				<div class="spinner"></div>
-				<p class="loading-text">Загружаем видео...</p>
-				<div class="loading-bar">
-					<div class="loading-progress"></div>
-				</div>
-			</div>
+			<div class="spinner"></div>
+			<p>Загрузка видео...</p>
 		</div>
 	{/if}
 
-	<!-- Состояние ошибки -->
 	{#if error}
 		<div class="error">
-			<div class="error-content">
-				<div class="error-icon">
-					<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-						<circle cx="12" cy="12" r="10"/>
-						<line x1="15" y1="9" x2="9" y2="15"/>
-						<line x1="9" y1="9" x2="15" y2="15"/>
-					</svg>
-				</div>
-				<h3 class="error-title">Ошибка воспроизведения</h3>
-				<p class="error-message">{error}</p>
-				<button
-					class="retry-button"
-					onclick={() => {
-						error = null;
-						isLoading = true;
-						initPlayer();
-					}}
-				>
-					<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-						<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
-						<path d="M21 3v5h-5"/>
-						<path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
-						<path d="M3 21v-5h5"/>
-					</svg>
-					Попробовать снова
-				</button>
-			</div>
+			<p>{error}</p>
+			<button onclick={() => { error = null; isLoading = true; initPlayer(); }}>
+				Попробовать снова
+			</button>
 		</div>
 	{/if}
 
-	<!-- Видео плеер -->
 	<video
 		bind:this={videoElement}
-		controls
 		preload="metadata"
 		class="video-player"
 		class:hidden={isLoading || error}
-		class:controls-visible={showControls}
 	>
 		<track kind="captions">
 		Ваш браузер не поддерживает воспроизведение видео.
 	</video>
+
+	<!-- Кастомные элементы управления -->
+	<div class="controls" class:visible={showControls && !isLoading && !error}>
+		<div class="progress-bar">
+			<input
+				type="range"
+				min="0"
+				max="100"
+				step="0.1"
+				value={(currentTime / duration) * 100 || 0}
+				oninput={updateProgress}
+				class="progress"
+			/>
+			<div class="progress-filled" style={`width: ${(currentTime / duration) * 100 || 0}%`}></div>
+		</div>
+
+		<div class="control-bar">
+			<button onclick={togglePlay} class="control-btn" aria-label={isPlaying ? "Пауза" : "Воспроизведение"}>
+				{#if isPlaying}
+					<svg width="24" height="24" viewBox="0 0 24 24">
+						<rect x="6" y="4" width="4" height="16" />
+						<rect x="14" y="4" width="4" height="16" />
+					</svg>
+				{:else}
+					<svg width="24" height="24" viewBox="0 0 24 24">
+						<path d="M8 5v14l11-7z" />
+					</svg>
+				{/if}
+			</button>
+
+			<div class="time">
+				{formatTime(currentTime)} / {formatTime(duration)}
+			</div>
+
+			<div class="volume-control">
+				<button onclick={toggleMute} class="control-btn"
+						aria-label={isMuted ? "Включить звук" : "Выключить звук"}>
+					{#if isMuted || volume === 0}
+						<svg width="24" height="24" viewBox="0 0 24 24">
+							<path
+								d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" />
+						</svg>
+					{:else if volume < 0.5}
+						<svg width="24" height="24" viewBox="0 0 24 24">
+							<path
+								d="M18.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM5 9v6h4l5 5V4L9 9H5z" />
+						</svg>
+					{:else}
+						<svg width="24" height="24" viewBox="0 0 24 24">
+							<path
+								d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
+						</svg>
+					{/if}
+				</button>
+				<input
+					type="range"
+					min="0"
+					max="1"
+					step="0.01"
+					bind:value={volume}
+					oninput={updateVolume}
+					class="volume-slider"
+				/>
+			</div>
+
+			<button onclick={toggleFullscreen} class="control-btn fullscreen-btn"
+					aria-label={isFullscreen ? "Выйти из полноэкранного режима" : "Полноэкранный режим"}>
+				{#if isFullscreen}
+					<svg width="24" height="24" viewBox="0 0 24 24">
+						<path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z" />
+					</svg>
+				{:else}
+					<svg width="24" height="24" viewBox="0 0 24 24">
+						<path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" />
+					</svg>
+				{/if}
+			</button>
+		</div>
+	</div>
 </div>
 
 <style>
+    :global(:root) {
+        --primary-color: #ff3e00;
+        --control-bg: rgba(0, 0, 0, 0.7);
+        --control-hover: rgba(255, 255, 255, 0.1);
+        --progress-height: 4px;
+        --progress-bg: rgba(255, 255, 255, 0.2);
+        --controls-height: 60px;
+    }
+
     .video-container {
         position: relative;
         width: 100%;
         max-width: 1200px;
         margin: 0 auto;
-        background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-        border-radius: 16px;
+        background: #000;
+        border-radius: 12px;
         overflow: hidden;
-        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
-        transition: all 0.3s ease;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        aspect-ratio: 16/9;
     }
 
     .video-container.fullscreen {
         max-width: none;
         border-radius: 0;
-        box-shadow: none;
+        height: 100vh;
     }
 
     .video-player {
         width: 100%;
-        height: auto;
-        min-height: 300px;
-        background-color: #000;
-        border-radius: inherit;
-        transition: all 0.3s ease;
+        height: 100%;
+        display: block;
+        cursor: pointer;
     }
 
     .video-player.hidden {
         display: none;
     }
 
-    /* Кнопка назад */
-    .back-button {
+    /* Контролы */
+    .controls {
         position: absolute;
-        top: 20px;
-        left: 20px;
-        z-index: 1000;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: linear-gradient(transparent, var(--control-bg));
+        padding: 12px 16px;
+        transition: opacity 0.3s ease;
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    .controls.visible {
+        opacity: 1;
+        pointer-events: all;
+    }
+
+    .progress-bar {
+        position: relative;
+        height: var(--progress-height);
+        margin-bottom: 10px;
+        cursor: pointer;
+    }
+
+    .progress {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        opacity: 0;
+        cursor: pointer;
+        z-index: 10;
+    }
+
+    .progress-filled {
+        position: absolute;
+        height: 100%;
+        background: var(--primary-color);
+        border-radius: 2px;
+        transition: width 0.1s linear;
+    }
+
+    .progress-bar::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 100%;
+        background: var(--progress-bg);
+        border-radius: 2px;
+    }
+
+    .control-bar {
         display: flex;
         align-items: center;
-        gap: 8px;
-        padding: 12px 16px;
-        background: rgba(0, 0, 0, 0.7);
-        backdrop-filter: blur(10px);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 12px;
+        gap: 16px;
+    }
+
+    .control-btn {
+        background: none;
+        border: none;
         color: white;
-        font-size: 14px;
-        font-weight: 500;
+        padding: 8px;
+        border-radius: 50%;
         cursor: pointer;
-        transition: all 0.3s ease;
-        opacity: 0;
-        transform: translateY(-10px);
-        pointer-events: none;
-    }
-
-    .back-button.show {
-        opacity: 1;
-        transform: translateY(0);
-        pointer-events: auto;
-    }
-
-    .back-button:hover {
-        background: rgba(0, 0, 0, 0.9);
-        border-color: rgba(255, 255, 255, 0.3);
-        transform: translateY(-2px);
-        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
-    }
-
-    .back-text {
-        display: inline;
-    }
-
-    /* Кнопка полноэкранного режима */
-    .fullscreen-button {
-        position: absolute;
-        top: 20px;
-        right: 20px;
-        z-index: 1000;
-        padding: 12px;
-        background: rgba(0, 0, 0, 0.7);
-        backdrop-filter: blur(10px);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 12px;
-        color: white;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        opacity: 0;
-        transform: translateY(-10px);
-        pointer-events: none;
-    }
-
-    .fullscreen-button.show {
-        opacity: 1;
-        transform: translateY(0);
-        pointer-events: auto;
-    }
-
-    .fullscreen-button:hover {
-        background: rgba(0, 0, 0, 0.9);
-        border-color: rgba(255, 255, 255, 0.3);
-        transform: translateY(-2px);
-        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
-    }
-
-    /* Состояние загрузки */
-    .loading {
-        position: absolute;
-        inset: 0;
+        transition: background 0.2s;
         display: flex;
         align-items: center;
         justify-content: center;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        z-index: 100;
     }
 
-    .loading-content {
-        text-align: center;
+    .control-btn:hover, .control-btn:focus {
+        background: var(--control-hover);
+    }
+
+    .control-btn svg {
+        fill: currentColor;
+        width: 24px;
+        height: 24px;
+    }
+
+    .time {
         color: white;
-        max-width: 300px;
-        padding: 40px 20px;
+        font-size: 14px;
+        min-width: 100px;
+        text-align: center;
+        font-family: monospace;
+    }
+
+    .volume-control {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 1;
+    }
+
+    .volume-slider {
+        width: 100px;
+        height: 4px;
+        opacity: 0;
+        transition: opacity 0.2s;
+        cursor: pointer;
+		color: var(--primary-color);
+    }
+
+    .volume-control:hover .volume-slider {
+        opacity: 1;
+    }
+
+    /* Loading & Error States */
+    .loading, .error {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 20;
+        background: rgba(0, 0, 0, 0.8);
     }
 
     .spinner {
-        width: 60px;
-        height: 60px;
-        border: 4px solid rgba(255, 255, 255, 0.3);
-        border-top: 4px solid #ffffff;
+        width: 50px;
+        height: 50px;
+        border: 4px solid rgba(255, 255, 255, 0.1);
+        border-top: 4px solid var(--primary-color);
         border-radius: 50%;
-        animation: spin 1s cubic-bezier(0.68, -0.55, 0.265, 1.55) infinite;
-        margin: 0 auto 24px;
+        animation: spin 1s linear infinite;
+        margin-bottom: 16px;
     }
 
-    .loading-text {
-        font-size: 18px;
-        font-weight: 600;
-        margin-bottom: 24px;
-        opacity: 0.9;
-    }
-
-    .loading-bar {
-        width: 100%;
-        height: 4px;
-        background: rgba(255, 255, 255, 0.2);
-        border-radius: 2px;
-        overflow: hidden;
-    }
-
-    .loading-progress {
-        width: 100%;
-        height: 100%;
-        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.8), transparent);
-        animation: loading-shimmer 1.5s infinite;
-    }
-
-    @keyframes spin {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(360deg); }
-    }
-
-    @keyframes loading-shimmer {
-        0% { transform: translateX(-100%); }
-        100% { transform: translateX(100%); }
-    }
-
-    /* Состояние ошибки */
     .error {
-        position: absolute;
-        inset: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
-        z-index: 100;
+        background: rgba(0, 0, 0, 0.9);
+        color: #ff6b6b;
     }
 
-    .error-content {
-        text-align: center;
+    .error button {
+        margin-top: 20px;
+        padding: 10px 24px;
+        background: var(--primary-color);
         color: white;
-        max-width: 400px;
-        padding: 40px 20px;
-    }
-
-    .error-icon {
-        margin: 0 auto 24px;
-        opacity: 0.9;
-    }
-
-    .error-title {
-        font-size: 24px;
-        font-weight: 700;
-        margin-bottom: 12px;
-        line-height: 1.2;
-    }
-
-    .error-message {
-        font-size: 16px;
-        margin-bottom: 32px;
-        opacity: 0.9;
-        line-height: 1.5;
-    }
-
-    .retry-button {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        padding: 14px 28px;
-        background: rgba(255, 255, 255, 0.2);
-        backdrop-filter: blur(10px);
-        border: 2px solid rgba(255, 255, 255, 0.3);
-        border-radius: 12px;
-        color: white;
-        font-size: 16px;
-        font-weight: 600;
+        border: none;
+        border-radius: 30px;
         cursor: pointer;
-        transition: all 0.3s ease;
+        font-weight: 600;
+        transition: background 0.2s;
     }
 
-    .retry-button:hover {
-        background: rgba(255, 255, 255, 0.3);
-        border-color: rgba(255, 255, 255, 0.5);
-        transform: translateY(-2px);
-        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+    .error button:hover {
+        background: #ff3e00;
     }
 
     /* Адаптивность */
     @media (max-width: 768px) {
         .video-container {
-            margin: 10px;
-            border-radius: 12px;
+            border-radius: 0;
         }
 
-        .back-button {
-            top: 15px;
-            left: 15px;
-            padding: 10px 12px;
+        .controls {
+            padding: 8px 12px;
+        }
+
+        .volume-slider {
+            width: 70px;
+        }
+
+        .time {
+            min-width: 80px;
             font-size: 13px;
-        }
-
-        .back-text {
-            display: none;
-        }
-
-        .fullscreen-button {
-            top: 15px;
-            right: 15px;
-            padding: 10px;
-        }
-
-        .loading-content {
-            padding: 30px 15px;
-        }
-
-        .loading-text {
-            font-size: 16px;
-        }
-
-        .error-content {
-            padding: 30px 15px;
-        }
-
-        .error-title {
-            font-size: 20px;
-        }
-
-        .error-message {
-            font-size: 14px;
-        }
-
-        .retry-button {
-            padding: 12px 24px;
-            font-size: 14px;
         }
     }
 
     @media (max-width: 480px) {
-        .video-container {
-            margin: 5px;
-            border-radius: 8px;
+        .volume-slider {
+            display: none;
         }
 
-        .video-player {
-            min-height: 200px;
-        }
-
-        .back-button {
-            top: 12px;
-            left: 12px;
-            padding: 8px 10px;
-        }
-
-        .fullscreen-button {
-            top: 12px;
-            right: 12px;
-            padding: 8px;
-        }
-
-        .spinner {
-            width: 50px;
-            height: 50px;
-        }
-
-        .error-title {
-            font-size: 18px;
+        .time {
+            min-width: 70px;
         }
     }
 
-    /* Скрытие контролов в полноэкранном режиме */
-    .video-container.fullscreen .back-button:not(.show),
-    .video-container.fullscreen .fullscreen-button:not(.show) {
-        opacity: 0;
-        pointer-events: none;
-    }
-
-    /* Плавные переходы для контролов */
-    .back-button,
-    .fullscreen-button {
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    @keyframes spin {
+        0% {
+            transform: rotate(0deg);
+        }
+        100% {
+            transform: rotate(360deg);
+        }
     }
 </style>

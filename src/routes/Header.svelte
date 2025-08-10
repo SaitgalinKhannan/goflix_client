@@ -19,6 +19,9 @@
 			<li aria-current={page.url.pathname === '/' ? 'page' : undefined}>
 				<a href="/">Home</a>
 			</li>
+			<li>
+				<a href="https://chat.khannan.ru">Chat</a>
+			</li>
 			<li aria-current={page.url.pathname.startsWith('/files') ? 'page' : undefined}>
 				<a href="/files">Files</a>
 			</li>

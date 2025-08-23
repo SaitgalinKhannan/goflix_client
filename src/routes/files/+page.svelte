@@ -61,13 +61,13 @@
 
 	function navigateToFolder(folderPath: string) {
 		//currentPath = normalizeFilePath(folderPath);
-			window.location.href = `/files?path=${encodeURIComponent(folderPath)}`
+		window.location.href = `/files?path=${encodeURIComponent(folderPath)}`;
 	}
 
 	// Функция для проверки, является ли файл видео файлом
 	function isVideoFile(filename: string): boolean {
 		const videoExtensions = ['.mp4', '.mkv', '.avi', '.mov', '.webm', '.m3u8'];
-		return videoExtensions.some(ext => filename.toLowerCase().endsWith(ext));
+		return videoExtensions.some((ext) => filename.toLowerCase().endsWith(ext));
 	}
 
 	$effect(() => {
@@ -102,7 +102,8 @@
 				onclick={() => {
 					if (file.isDir) {
 						navigateToFolder(file.path);
-					} else if (isVideoFile(file.name)) { // Если mkv, mp4 или другое видео.
+					} else if (isVideoFile(file.name)) {
+						// Если mkv, mp4 или другое видео.
 						// Перенаправляем на страницу плеера с передачей пути к файлу
 						window.location.href = `/player?path=${encodeURIComponent(file.path)}`;
 					}
@@ -119,35 +120,35 @@
 {/if}
 
 <style>
-    .files {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-        gap: 1rem;
-    }
+	.files {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+		gap: 1rem;
+	}
 
-    .file-card {
-        border: 1px solid #ddd;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        background: white;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        word-break: break-all;
-    }
+	.file-card {
+		border: 1px solid #ddd;
+		padding: 1rem;
+		border-radius: 0.5rem;
+		background: white;
+		box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+		word-break: break-all;
+	}
 
-    .file-card.folder {
-        cursor: pointer;
-    }
+	.file-card.folder {
+		cursor: pointer;
+	}
 
-    button {
-        padding: 0.5rem 1rem;
-        background: #ff3e00;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-        transition: background 0.2s;
-    }
+	button {
+		padding: 0.5rem 1rem;
+		background: #ff3e00;
+		border: none;
+		border-radius: 4px;
+		cursor: pointer;
+		transition: background 0.2s;
+	}
 
-    button:hover {
-        background: #4075a6;
-    }
+	button:hover {
+		background: #4075a6;
+	}
 </style>

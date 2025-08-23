@@ -1,25 +1,25 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-	<meta charset="UTF-8" />
-	<title>HLS Streaming Example</title>
-	<script src="https://cdnjs.cloudflare.com/ajax/libs/video.js/7.17.0/video.min.js"></script>
-	<link
-		href="https://cdnjs.cloudflare.com/ajax/libs/video.js/7.17.0/video-js.min.css"
-		rel="stylesheet"
-	/>
-</head>
-<body>
-<h1>Adaptive Video Streaming with HLS</h1>
-<video id="videoPlayer" class="video-js" controls width="720" height="400">
-	<source
-		src="http://localhost:8080/api/video?path=torrents/Jigoku Sensei Nube - AniLiberty [WEBRip 1080p HEVC]/Jigoku_Sensei_Nube_[01]_[HEVC].m3u8"
-		type="application/vnd.apple.mpegurl"
-	/>
-	Your browser does not support HLS playback.
-</video>
-<script>
-	const player = videojs('videoPlayer');
-</script>
-</body>
+	<head>
+		<meta charset="UTF-8" />
+		<title>HLS Streaming Example</title>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/video.js/7.17.0/video.min.js"></script>
+		<link
+			href="https://cdnjs.cloudflare.com/ajax/libs/video.js/7.17.0/video-js.min.css"
+			rel="stylesheet"
+		/>
+	</head>
+	<body>
+		<h1>Adaptive Video Streaming with HLS</h1>
+		<video id="videoPlayer" class="video-js" controls width="720" height="400">
+			<source
+				src="http://localhost:8080/api/video?path=torrents/Jigoku Sensei Nube - AniLiberty [WEBRip 1080p HEVC]/Jigoku_Sensei_Nube_[01]_[HEVC].m3u8"
+				type="application/vnd.apple.mpegurl"
+			/>
+			Your browser does not support HLS playback.
+		</video>
+		<script>
+			const player = videojs('videoPlayer');
+		</script>
+	</body>
 </html>

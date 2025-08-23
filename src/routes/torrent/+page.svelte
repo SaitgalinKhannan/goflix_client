@@ -1,16 +1,89 @@
 <script lang="ts">
-	import { onDestroy, onMount } from 'svelte';
-	import { API_URL, WS_URL } from '$lib/config/api';
-	import { API_ENDPOINTS, CONVERTING_STATES, TORRENT_STATES } from '$lib/utils/constants';
-	import type { Torrent } from '$lib/types';
+	import { onMount } from 'svelte';
+	import { API_URL } from '$lib/config/api';
+	import { API_ENDPOINTS, TORRENT_STATES } from '$lib/utils/constants';
+	import type { Torrent } from '$lib/types/torrent';
 	import { convertingStateToString, stateToString } from '$lib/utils/mappers';
+	import { getWebSocketContext } from '$lib/context/websocket';
+	import { notifications } from '$lib/stores/notificationStore';
 
 	let magnet: string = $state('');
 	let torrents: Torrent[] = $state([]);
+	// let previousTorrents: Torrent[] = [];
 	let isLoading: boolean = $state(true);
 	let error: string | null = $state(null);
-	let ws: WebSocket | null = null;
 	let processingTorrents: Set<string> = $state(new Set());
+
+	import { page } from '$app/state';
+
+	const wsStore = getWebSocketContext();
+	const unsubscribe = wsStore.subscribe((newTorrents) => {
+		if (page.url.hostname !== '/torrent') return;
+		const oldTorrents = new Map(torrents.map((t) => [t.infoHash, t]));
+		const currentTorrentsMap = new Map(newTorrents.map((t) => [t.infoHash, t]));
+
+		// Detect new torrents and state changes
+		newTorrents.forEach((newTorrent) => {
+			const oldTorrent = oldTorrents.get(newTorrent.infoHash);
+
+			if (!oldTorrent) {
+				// New torrent added
+				notifications.add(
+					`Torrent "${newTorrent.name || newTorrent.infoHash}" has been added.`,
+					'info',
+					'Torrent Added'
+				);
+			} else {
+				// Check for download completion
+				if (oldTorrent.downloadedPercent < 100 && newTorrent.downloadedPercent === 100) {
+					notifications.add(
+						`Torrent "${newTorrent.name || newTorrent.infoHash}" has finished downloading!`,
+						'success',
+						'Download Complete'
+					);
+				}
+
+				// Check for state changes
+				if (oldTorrent.state !== newTorrent.state) {
+					notifications.add(
+						`Torrent "${newTorrent.name || newTorrent.infoHash}" state changed to ${stateToString(newTorrent.state)}.`,
+						'info',
+						'Torrent State Changed'
+					);
+				}
+
+				// Check for converting state changes
+				if (oldTorrent.convertingState !== newTorrent.convertingState) {
+					if (newTorrent.convertingState) {
+						notifications.add(
+							`Torrent "${newTorrent.name || newTorrent.infoHash}" is now ${convertingStateToString(newTorrent.convertingState)}.`,
+							'info',
+							'Torrent Converting'
+						);
+					} else if (oldTorrent.convertingState) {
+						notifications.add(
+							`Torrent "${newTorrent.name || newTorrent.infoHash}" finished converting.`,
+							'success',
+							'Conversion Complete'
+						);
+					}
+				}
+			}
+		});
+
+		// Detect deleted torrents
+		torrents.forEach((oldTorrent) => {
+			if (!currentTorrentsMap.has(oldTorrent.infoHash)) {
+				notifications.add(
+					`Torrent "${oldTorrent.name || oldTorrent.infoHash}" has been removed.`,
+					'info',
+					'Torrent Removed'
+				);
+			}
+		});
+
+		torrents = newTorrents;
+	});
 
 	let sortBy = $state<'name' | 'infoHash' | 'progress'>('infoHash');
 	let sortOrder = $state<'asc' | 'desc'>('asc');
@@ -41,7 +114,6 @@
 			const response = await fetch(API_URL + API_ENDPOINTS.TORRENTS);
 			if (!response.ok) {
 				console.error(`Failed to load torrents: ${response.status}`);
-				alert(`Failed to load torrents: ${response.status}`);
 			}
 			const data = await response.json();
 			if (Array.isArray(data)) {
@@ -52,6 +124,7 @@
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Unknown error occurred';
 			console.error('Error loading torrents:', err);
+			notifications.add(error, 'error', 'Error loading torrents');
 		} finally {
 			isLoading = false;
 		}
@@ -69,14 +142,16 @@
 				body: JSON.stringify({ source: magnet })
 			});
 			if (!response.ok) {
-				console.error(`HTTP error! status: ${response.status}`);
-				alert(`HTTP error! status: ${response.status}`);
+				const errorMessage = `HTTP error! status: ${response.status}`;
+				console.error(errorMessage);
+				notifications.add(errorMessage, 'error', 'Failed to add torrent');
 			}
 			// Очистка поля ввода после успешной отправки
 			magnet = '';
 		} catch (error) {
+			const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
 			console.error('Failed to add torrent:', error);
-			alert('Failed to add torrent. Check console for details.');
+			notifications.add(`Failed to add torrent: ${errorMessage}`, 'error', 'Failed to add torrent');
 		}
 	}
 
@@ -91,8 +166,9 @@
 				throw new Error(`Failed to pause torrent: ${response.status}`);
 			}
 		} catch (error) {
+			const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
 			console.error('Failed to pause torrent:', error);
-			alert('Failed to pause torrent');
+			notifications.add(`Failed to pause torrent: ${errorMessage}`, 'error', 'Pause Failed');
 		} finally {
 			processingTorrents.delete(hash);
 		}
@@ -109,8 +185,9 @@
 				throw new Error(`Failed to resume torrent: ${response.status}`);
 			}
 		} catch (error) {
+			const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
 			console.error('Failed to resume torrent:', error);
-			alert('Failed to resume torrent');
+			notifications.add(`Failed to resume torrent: ${errorMessage}`, 'error', 'Resume Failed');
 		} finally {
 			processingTorrents.delete(hash);
 		}
@@ -131,10 +208,11 @@
 				throw new Error(`Failed to delete torrent: ${response.status}`);
 			}
 			// Удаляем торрент из локального списка
-			torrents = torrents.filter(t => t.infoHash !== hash);
+			torrents = torrents.filter((t) => t.infoHash !== hash);
 		} catch (error) {
+			const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
 			console.error('Failed to delete torrent:', error);
-			alert('Failed to delete torrent');
+			notifications.add(`Failed to delete torrent: ${errorMessage}`, 'error', 'Delete Failed');
 		} finally {
 			processingTorrents.delete(hash);
 		}
@@ -151,51 +229,20 @@
 				throw new Error(`Failed to convert torrent: ${response.status}`);
 			}
 		} catch (error) {
+			const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
 			console.error('Failed to convert torrent:', error);
-			alert('Failed to convert torrent');
+			notifications.add(`Failed to convert torrent: ${errorMessage}`, 'error', 'Convert Failed');
 		} finally {
 			processingTorrents.delete(hash);
 		}
 	}
 
 	// Инициализация при монтировании компонента
-	onMount(async () => {
-		await loadTorrents();
-
-		// Инициализация WebSocket соединения
-		try {
-			ws = new WebSocket(WS_URL);
-			ws.onmessage = (event: MessageEvent) => {
-				try {
-					if (typeof event.data === 'string') {
-						const data = JSON.parse(event.data);
-						if (Array.isArray(data)) {
-							torrents = data as Torrent[];
-						}
-					}
-				} catch (e) {
-					console.error('Failed to parse WebSocket message:', e);
-				}
-			};
-			ws.onerror = (error: Event) => {
-				console.error('WebSocket error:', error);
-			};
-			ws.onclose = (event: CloseEvent) => {
-				if (event.code !== 1000) { // 1000 = нормальное закрытие
-					console.warn(`WebSocket closed unexpectedly: [${event.code}] ${event.reason}`);
-				}
-			};
-		} catch (error) {
-			console.error('WebSocket initialization failed:', error);
-		}
-	});
-
-	// Очистка при размонтировании компонента
-	onDestroy(() => {
-		if (ws) {
-			ws.close(1000, 'Component unmounted');
-			ws = null;
-		}
+	onMount(() => {
+		loadTorrents(); // No await here, let it run in the background
+		return () => {
+			unsubscribe();
+		};
 	});
 </script>
 
@@ -205,11 +252,8 @@
 </svelte:head>
 
 <div class="add-form">
-	<button onclick={() => window.location.href = "/"}>Back</button>
-	<input
-		type="text"
-		placeholder="Enter magnet link"
-		bind:value={magnet} />
+	<button onclick={() => (window.location.href = '/')}>Back</button>
+	<input type="text" placeholder="Enter magnet link" bind:value={magnet} />
 	<button onclick={addTorrent}>Add Torrent</button>
 </div>
 
@@ -234,7 +278,9 @@
 			</div>
 
 			<div class="torrent-info">
-				<small>{t.downloadedPercent.toFixed(2)}% - {(t.size / 1024 / 1024).toFixed(1) + ' MB'}</small>
+				<small
+					>{t.downloadedPercent.toFixed(2)}% - {(t.size / 1024 / 1024).toFixed(1) + ' MB'}</small
+				>
 				<small>{stateToString(t.state)}</small>
 				{#if t.convertingState}
 					<small>{convertingStateToString(t.convertingState)}</small>
@@ -246,24 +292,18 @@
 					<button disabled class="btn-disabled">Processing...</button>
 				{:else}
 					{#if t.state === TORRENT_STATES.DOWNLOADING}
-						<button onclick={() => pauseTorrent(t.infoHash)} class="btn-pause">
-							Pause
-						</button>
-					{:else}
-						<button onclick={() => resumeTorrent(t.infoHash)} class="btn-resume">
-							Resume
-						</button>
+						<button onclick={() => pauseTorrent(t.infoHash)} class="btn-pause"> Pause </button>
+					{:else if t.downloadedPercent !== 100}
+						<button onclick={() => resumeTorrent(t.infoHash)} class="btn-resume"> Resume </button>
 					{/if}
 
-					{#if t.downloadedPercent === 100}
+					{#if t.downloadedPercent === 100 && !t.convertingState}
 						<button onclick={() => convertTorrent(t.infoHash)} class="btn-convert">
 							Convert
 						</button>
 					{/if}
 
-					<button onclick={() => deleteTorrent(t.infoHash)} class="btn-delete">
-						Delete
-					</button>
+					<button onclick={() => deleteTorrent(t.infoHash)} class="btn-delete"> Delete </button>
 				{/if}
 			</div>
 		</div>
@@ -271,133 +311,134 @@
 {/if}
 
 <style>
-    .add-form {
-        margin-bottom: 1.5rem;
-        display: flex;
-        gap: 0.5rem;
-    }
+	.add-form {
+		margin-bottom: 1.5rem;
+		display: flex;
+		gap: 0.5rem;
+	}
 
-    input {
-        flex: 1;
-        padding: 0.5rem;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-    }
+	input {
+		flex: 1;
+		padding: 0.5rem;
+		border: 1px solid #ddd;
+		border-radius: 4px;
+	}
 
-    button {
-        padding: 0.5rem 1rem;
-        background: #ff3e00;
-        color: white;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-        transition: background 0.2s;
-    }
+	button {
+		padding: 0.5rem 1rem;
+		background: #ff3e00;
+		color: white;
+		border: none;
+		border-radius: 4px;
+		cursor: pointer;
+		transition: background 0.2s;
+	}
 
-    button:hover {
-        background: #4075a6;
-    }
+	button:hover {
+		background: #4075a6;
+	}
 
-    button:disabled, .btn-disabled {
-        background: #ccc;
-        cursor: not-allowed;
-    }
+	button:disabled,
+	.btn-disabled {
+		background: #ccc;
+		cursor: not-allowed;
+	}
 
-    .torrent {
-        border: 1px solid #ddd;
-        padding: 1rem;
-        margin-bottom: 0.5rem;
-        border-radius: 0.5rem;
-    }
+	.torrent {
+		border: 1px solid #ddd;
+		padding: 1rem;
+		margin-bottom: 0.5rem;
+		border-radius: 0.5rem;
+	}
 
-    .torrent-header {
-        margin-bottom: 0.5rem;
-    }
+	.torrent-header {
+		margin-bottom: 0.5rem;
+	}
 
-    .progress-bar {
-        background: #eee;
-        border-radius: 0.25rem;
-        overflow: hidden;
-        height: 1rem;
-        margin: 0.5rem 0;
-    }
+	.progress-bar {
+		background: #eee;
+		border-radius: 0.25rem;
+		overflow: hidden;
+		height: 1rem;
+		margin: 0.5rem 0;
+	}
 
-    .progress {
-        height: 100%;
-        background: #4075a6;
-        transition: width 0.3s ease;
-    }
+	.progress {
+		height: 100%;
+		background: #4075a6;
+		transition: width 0.3s ease;
+	}
 
-    .torrent-info {
-        margin: 0.5rem 0;
-    }
+	.torrent-info {
+		margin: 0.5rem 0;
+	}
 
-    small {
-        display: block;
-        color: #666;
-        margin: 0.25rem 0;
-    }
+	small {
+		display: block;
+		color: #666;
+		margin: 0.25rem 0;
+	}
 
-    .torrent-controls {
-        display: flex;
-        gap: 0.5rem;
-        margin-top: 1rem;
-        flex-wrap: wrap;
-    }
+	.torrent-controls {
+		display: flex;
+		gap: 0.5rem;
+		margin-top: 1rem;
+		flex-wrap: wrap;
+	}
 
-    .torrent-controls button {
-        padding: 0.4rem 0.8rem;
-        font-size: 0.9rem;
-    }
+	.torrent-controls button {
+		padding: 0.4rem 0.8rem;
+		font-size: 0.9rem;
+	}
 
-    .btn-pause {
-        background: #ff9800;
-    }
+	.btn-pause {
+		background: #ff9800;
+	}
 
-    .btn-pause:hover {
-        background: #f57c00;
-    }
+	.btn-pause:hover {
+		background: #f57c00;
+	}
 
-    .btn-resume {
-        background: #4caf50;
-    }
+	.btn-resume {
+		background: #4caf50;
+	}
 
-    .btn-resume:hover {
-        background: #388e3c;
-    }
+	.btn-resume:hover {
+		background: #388e3c;
+	}
 
-    .btn-convert {
-        background: #2196f3;
-    }
+	.btn-convert {
+		background: #2196f3;
+	}
 
-    .btn-convert:hover {
-        background: #1976d2;
-    }
+	.btn-convert:hover {
+		background: #1976d2;
+	}
 
-    .btn-delete {
-        background: #f44336;
-    }
+	.btn-delete {
+		background: #f44336;
+	}
 
-    .btn-delete:hover {
-        background: #d32f2f;
-    }
+	.btn-delete:hover {
+		background: #d32f2f;
+	}
 
-    .loading {
-        text-align: center;
-        padding: 2rem;
-        color: #666;
-    }
+	.loading {
+		text-align: center;
+		padding: 2rem;
+		color: #666;
+	}
 
-    .error {
-        background: #ffebee;
-        color: #c62828;
-        padding: 1rem;
-        border-radius: 4px;
-        margin-bottom: 1rem;
-    }
+	.error {
+		background: #ffebee;
+		color: #c62828;
+		padding: 1rem;
+		border-radius: 4px;
+		margin-bottom: 1rem;
+	}
 
-    .error button {
-        margin-top: 0.5rem;
-        background: #c62828;
-    }
+	.error button {
+		margin-top: 0.5rem;
+		background: #c62828;
+	}
 </style>

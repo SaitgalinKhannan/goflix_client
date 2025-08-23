@@ -18,11 +18,13 @@ Netflix-like streaming service powered by torrents. Download and stream movies d
 ## Setup
 
 1. Install dependencies:
+
 ```bash
 npm install
 ```
 
 2. Start development server:
+
 ```bash
 npm run dev
 ```
@@ -36,4 +38,4 @@ npm run dev
 3. **Browse Files** - Navigate downloaded content on the `/files` page
 4. **Stream Content** - Play your downloaded movies
 
-*Built for only*
+_Built for only_

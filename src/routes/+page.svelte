@@ -1,7 +1,14 @@
 <script lang="ts">
-	import Counter from './Counter.svelte';
-	import welcome from '$lib/images/svelte-welcome.webp';
-	import welcomeFallback from '$lib/images/svelte-welcome.png';
+	import VideoCard from '$lib/components/VideoCard.svelte';
+	import type { Torrent } from '$lib/types/torrent';
+
+	// Data is loaded in +page.ts
+	let { data } = $props<{ data: { torrents: Torrent[] } }>();
+
+	// Filter torrents that have video files (Svelte 5 runes)
+	const torrents = $derived(
+		data?.torrents?.filter((torrent: Torrent) => torrent.videoFiles && Array.isArray(torrent.videoFiles) && torrent.videoFiles.length > 0) ?? []
+	);
 </script>
 
 <svelte:head>
@@ -10,50 +17,55 @@
 </svelte:head>
 
 <section>
-	<h1>
-		<span class="welcome">
-			<picture>
-				<source srcset={welcome} type="image/webp" />
-				<img src={welcomeFallback} alt="Welcome" />
-			</picture>
-		</span>
-
-		to your new<br />SvelteKit app
-	</h1>
-
-	<h2>
-		try editing <strong>src/routes/+page.svelte</strong>
-	</h2>
-
-	<Counter />
+	{#if torrents.length > 0}
+		{#each torrents as torrent (torrent.infoHash)}
+			<div class="torrent-section">
+				<h2 class="torrent-title">{torrent.name || torrent.infoHash}</h2>
+				{#if torrent.videoFiles && torrent.videoFiles.length > 0}
+					<div class="video-grid">
+						{#each torrent.videoFiles as videoFile (videoFile.path)}
+							<VideoCard {videoFile} torrentName={torrent.name || torrent.infoHash} />
+						{/each}
+					</div>
+				{:else}
+					<p>No video files found for this torrent.</p>
+				{/if}
+			</div>
+		{/each}
+	{:else}
+		<p>No torrents with video files found. Add some torrents with video files to see them here.</p>
+	{/if}
 </section>
 
 <style>
-	section {
-		display: flex;
-		flex-direction: column;
-		justify-content: center;
-		align-items: center;
-		flex: 0.6;
-	}
+    section {
+        padding: 1rem;
+    }
 
-	h1 {
-		width: 100%;
-	}
+    .video-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
 
-	.welcome {
-		display: block;
-		position: relative;
-		width: 100%;
-		height: 0;
-		padding: 0 0 calc(100% * 495 / 2048) 0;
-	}
+    p {
+        text-align: center;
+        color: #666;
+        font-style: italic;
+    }
 
-	.welcome img {
-		position: absolute;
-		width: 100%;
-		height: 100%;
-		top: 0;
-		display: block;
-	}
+    .torrent-section {
+        margin-bottom: 2rem;
+        padding: 1rem;
+        border: 1px solid #eee;
+        border-radius: 8px;
+    }
+
+    .torrent-title {
+        color: #ff3e00;
+        margin-bottom: 1rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 1px solid #eee;
+    }
 </style>

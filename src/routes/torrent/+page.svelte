@@ -7,14 +7,27 @@
 	import { getWebSocketContext } from '$lib/context/websocket';
 	import { notifications } from '$lib/stores/notificationStore';
 
+	const { data } = $props<{ data: { torrents: Torrent[] } }>();
 	let magnet: string = $state('');
-	let torrents: Torrent[] = $state([]);
+	let torrents: Torrent[] = $state(data.torrents ?? []);
 	// let previousTorrents: Torrent[] = [];
-	let isLoading: boolean = $state(true);
+	let isLoading: boolean = $state(false);
 	let error: string | null = $state(null);
 	let processingTorrents: Set<string> = $state(new Set());
+import TorrentModal from '$lib/components/TorrentModal.svelte';
 
-	import { page } from '$app/state';
+let selectedTorrent: Torrent | null = $state(null);
+
+function showTorrentDetails(torrent: Torrent) {
+	selectedTorrent = torrent;
+}
+
+function closeTorrentDetails() {
+	selectedTorrent = null;
+}
+
+import { page } from '$app/state';
+
 
 	const wsStore = getWebSocketContext();
 	const unsubscribe = wsStore.subscribe((newTorrents) => {
@@ -239,11 +252,19 @@
 
 	// Инициализация при монтировании компонента
 	onMount(() => {
-		loadTorrents(); // No await here, let it run in the background
+		// Данные уже пришли через load (SSR/прелоад).
 		return () => {
 			unsubscribe();
 		};
 	});
+	
+	// Handle keyboard events for torrent items
+	function handleTorrentKeydown(event: KeyboardEvent, torrent: Torrent) {
+		if (event.key === 'Enter' || event.key === ' ') {
+			event.preventDefault();
+			showTorrentDetails(torrent);
+		}
+	}
 </script>
 
 <svelte:head>
@@ -268,7 +289,13 @@
 	<p>No torrents added yet.</p>
 {:else}
 	{#each sortedTorrents as t (t.infoHash)}
-		<div class="torrent">
+		<div
+			class="torrent"
+			role="button"
+			tabindex="0"
+			onclick={() => showTorrentDetails(t)}
+			onkeydown={(e) => handleTorrentKeydown(e, t)}
+		>
 			<div class="torrent-header">
 				<strong>{t.name || t.infoHash}</strong>
 			</div>
@@ -310,6 +337,8 @@
 	{/each}
 {/if}
 
+<TorrentModal torrent={selectedTorrent} onClose={closeTorrentDetails} />
+
 <style>
 	.add-form {
 		margin-bottom: 1.5rem;
@@ -349,6 +378,14 @@
 		padding: 1rem;
 		margin-bottom: 0.5rem;
 		border-radius: 0.5rem;
+		cursor: pointer;
+	}
+
+	.torrent:hover,
+	.torrent:focus {
+		border-color: #ff3e00;
+		outline: 2px solid #ff3e00;
+		outline-offset: 2px;
 	}
 
 	.torrent-header {

@@ -3,7 +3,7 @@
 	import { notifications } from '$lib/stores/notificationStore';
 	import type { Notification } from '$lib/types/notification';
 
-	export let notification: Notification;
+	const { notification } = $props<{ notification: Notification }>();
 
 	let timeoutId: number;
 
@@ -30,8 +30,8 @@
 
 <div
 	class="notification {notification.type}"
-	on:mouseenter={clearTimer}
-	on:mouseleave={startTimer}
+	onmouseenter={clearTimer}
+	onmouseleave={startTimer}
 	role="alert"
 >
 	<div class="notification-content">
@@ -40,7 +40,7 @@
 		{/if}
 		<p class="notification-message">{notification.message}</p>
 	</div>
-	<button class="notification-close" on:click={removeNotification}> &times; </button>
+	<button class="notification-close" onclick={removeNotification}> &times; </button>
 </div>
 
 <style>

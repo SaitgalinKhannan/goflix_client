@@ -6,7 +6,6 @@
 	import { convertingStateToString, stateToString } from '$lib/utils/mappers';
 	import { getWebSocketContext } from '$lib/context/websocket';
 	import { notifications } from '$lib/stores/notificationStore';
-	import { page } from '$app/state';
 	import TorrentModal from '$lib/components/TorrentModal.svelte';
 
 	const { data } = $props<{ data: { torrents: Torrent[] } }>();
@@ -27,7 +26,6 @@
 
 	const wsStore = getWebSocketContext();
 	const unsubscribe = wsStore.subscribe((newTorrents) => {
-		if (page.url.hostname !== '/torrent') return;
 		const oldTorrents = new Map(torrents.map((t) => [t.infoHash, t]));
 		const currentTorrentsMap = new Map(newTorrents.map((t) => [t.infoHash, t]));
 

@@ -6,6 +6,8 @@
 	import { convertingStateToString, stateToString } from '$lib/utils/mappers';
 	import { getWebSocketContext } from '$lib/context/websocket';
 	import { notifications } from '$lib/stores/notificationStore';
+	import { page } from '$app/state';
+	import TorrentModal from '$lib/components/TorrentModal.svelte';
 
 	const { data } = $props<{ data: { torrents: Torrent[] } }>();
 	let magnet: string = $state('');
@@ -14,20 +16,16 @@
 	let isLoading: boolean = $state(false);
 	let error: string | null = $state(null);
 	let processingTorrents: Set<string> = $state(new Set());
-import TorrentModal from '$lib/components/TorrentModal.svelte';
 
-let selectedTorrent: Torrent | null = $state(null);
+	let selectedTorrent: Torrent | null = $state(null);
 
-function showTorrentDetails(torrent: Torrent) {
-	selectedTorrent = torrent;
-}
+	function showTorrentDetails(torrent: Torrent) {
+		selectedTorrent = torrent;
+	}
 
-function closeTorrentDetails() {
-	selectedTorrent = null;
-}
-
-import { page } from '$app/state';
-
+	function closeTorrentDetails() {
+		selectedTorrent = null;
+	}
 
 	const wsStore = getWebSocketContext();
 	const unsubscribe = wsStore.subscribe((newTorrents) => {
@@ -257,7 +255,7 @@ import { page } from '$app/state';
 			unsubscribe();
 		};
 	});
-	
+
 	// Handle keyboard events for torrent items
 	function handleTorrentKeydown(event: KeyboardEvent, torrent: Torrent) {
 		if (event.key === 'Enter' || event.key === ' ') {
@@ -306,7 +304,7 @@ import { page } from '$app/state';
 
 			<div class="torrent-info">
 				<small
-					>{t.downloadedPercent.toFixed(2)}% - {(t.size / 1024 / 1024).toFixed(1) + ' MB'}</small
+				>{t.downloadedPercent.toFixed(2)}% - {(t.size / 1024 / 1024).toFixed(1) + ' MB'}</small
 				>
 				<small>{stateToString(t.state)}</small>
 				{#if t.convertingState}
@@ -319,9 +317,9 @@ import { page } from '$app/state';
 					<button disabled class="btn-disabled">Processing...</button>
 				{:else}
 					{#if t.state === TORRENT_STATES.DOWNLOADING}
-						<button onclick={() => pauseTorrent(t.infoHash)} class="btn-pause"> Pause </button>
+						<button onclick={() => pauseTorrent(t.infoHash)} class="btn-pause"> Pause</button>
 					{:else if t.downloadedPercent !== 100}
-						<button onclick={() => resumeTorrent(t.infoHash)} class="btn-resume"> Resume </button>
+						<button onclick={() => resumeTorrent(t.infoHash)} class="btn-resume"> Resume</button>
 					{/if}
 
 					{#if t.downloadedPercent === 100 && !t.convertingState}
@@ -330,7 +328,7 @@ import { page } from '$app/state';
 						</button>
 					{/if}
 
-					<button onclick={() => deleteTorrent(t.infoHash)} class="btn-delete"> Delete </button>
+					<button onclick={() => deleteTorrent(t.infoHash)} class="btn-delete"> Delete</button>
 				{/if}
 			</div>
 		</div>
@@ -340,142 +338,142 @@ import { page } from '$app/state';
 <TorrentModal torrent={selectedTorrent} onClose={closeTorrentDetails} />
 
 <style>
-	.add-form {
-		margin-bottom: 1.5rem;
-		display: flex;
-		gap: 0.5rem;
-	}
+    .add-form {
+        margin-bottom: 1.5rem;
+        display: flex;
+        gap: 0.5rem;
+    }
 
-	input {
-		flex: 1;
-		padding: 0.5rem;
-		border: 1px solid #ddd;
-		border-radius: 4px;
-	}
+    input {
+        flex: 1;
+        padding: 0.5rem;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+    }
 
-	button {
-		padding: 0.5rem 1rem;
-		background: #ff3e00;
-		color: white;
-		border: none;
-		border-radius: 4px;
-		cursor: pointer;
-		transition: background 0.2s;
-	}
+    button {
+        padding: 0.5rem 1rem;
+        background: #ff3e00;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: background 0.2s;
+    }
 
-	button:hover {
-		background: #4075a6;
-	}
+    button:hover {
+        background: #4075a6;
+    }
 
-	button:disabled,
-	.btn-disabled {
-		background: #ccc;
-		cursor: not-allowed;
-	}
+    button:disabled,
+    .btn-disabled {
+        background: #ccc;
+        cursor: not-allowed;
+    }
 
-	.torrent {
-		border: 1px solid #ddd;
-		padding: 1rem;
-		margin-bottom: 0.5rem;
-		border-radius: 0.5rem;
-		cursor: pointer;
-	}
+    .torrent {
+        border: 1px solid #ddd;
+        padding: 1rem;
+        margin-bottom: 0.5rem;
+        border-radius: 0.5rem;
+        cursor: pointer;
+    }
 
-	.torrent:hover,
-	.torrent:focus {
-		border-color: #ff3e00;
-		outline: 2px solid #ff3e00;
-		outline-offset: 2px;
-	}
+    .torrent:hover,
+    .torrent:focus {
+        border-color: #ff3e00;
+        outline: 2px solid #ff3e00;
+        outline-offset: 2px;
+    }
 
-	.torrent-header {
-		margin-bottom: 0.5rem;
-	}
+    .torrent-header {
+        margin-bottom: 0.5rem;
+    }
 
-	.progress-bar {
-		background: #eee;
-		border-radius: 0.25rem;
-		overflow: hidden;
-		height: 1rem;
-		margin: 0.5rem 0;
-	}
+    .progress-bar {
+        background: #eee;
+        border-radius: 0.25rem;
+        overflow: hidden;
+        height: 1rem;
+        margin: 0.5rem 0;
+    }
 
-	.progress {
-		height: 100%;
-		background: #4075a6;
-		transition: width 0.3s ease;
-	}
+    .progress {
+        height: 100%;
+        background: #4075a6;
+        transition: width 0.3s ease;
+    }
 
-	.torrent-info {
-		margin: 0.5rem 0;
-	}
+    .torrent-info {
+        margin: 0.5rem 0;
+    }
 
-	small {
-		display: block;
-		color: #666;
-		margin: 0.25rem 0;
-	}
+    small {
+        display: block;
+        color: #666;
+        margin: 0.25rem 0;
+    }
 
-	.torrent-controls {
-		display: flex;
-		gap: 0.5rem;
-		margin-top: 1rem;
-		flex-wrap: wrap;
-	}
+    .torrent-controls {
+        display: flex;
+        gap: 0.5rem;
+        margin-top: 1rem;
+        flex-wrap: wrap;
+    }
 
-	.torrent-controls button {
-		padding: 0.4rem 0.8rem;
-		font-size: 0.9rem;
-	}
+    .torrent-controls button {
+        padding: 0.4rem 0.8rem;
+        font-size: 0.9rem;
+    }
 
-	.btn-pause {
-		background: #ff9800;
-	}
+    .btn-pause {
+        background: #ff9800;
+    }
 
-	.btn-pause:hover {
-		background: #f57c00;
-	}
+    .btn-pause:hover {
+        background: #f57c00;
+    }
 
-	.btn-resume {
-		background: #4caf50;
-	}
+    .btn-resume {
+        background: #4caf50;
+    }
 
-	.btn-resume:hover {
-		background: #388e3c;
-	}
+    .btn-resume:hover {
+        background: #388e3c;
+    }
 
-	.btn-convert {
-		background: #2196f3;
-	}
+    .btn-convert {
+        background: #2196f3;
+    }
 
-	.btn-convert:hover {
-		background: #1976d2;
-	}
+    .btn-convert:hover {
+        background: #1976d2;
+    }
 
-	.btn-delete {
-		background: #f44336;
-	}
+    .btn-delete {
+        background: #f44336;
+    }
 
-	.btn-delete:hover {
-		background: #d32f2f;
-	}
+    .btn-delete:hover {
+        background: #d32f2f;
+    }
 
-	.loading {
-		text-align: center;
-		padding: 2rem;
-		color: #666;
-	}
+    .loading {
+        text-align: center;
+        padding: 2rem;
+        color: #666;
+    }
 
-	.error {
-		background: #ffebee;
-		color: #c62828;
-		padding: 1rem;
-		border-radius: 4px;
-		margin-bottom: 1rem;
-	}
+    .error {
+        background: #ffebee;
+        color: #c62828;
+        padding: 1rem;
+        border-radius: 4px;
+        margin-bottom: 1rem;
+    }
 
-	.error button {
-		margin-top: 0.5rem;
-		background: #c62828;
-	}
+    .error button {
+        margin-top: 0.5rem;
+        background: #c62828;
+    }
 </style>

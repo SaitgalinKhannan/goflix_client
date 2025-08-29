@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import { API_URL } from '$lib/config/api';
 	import { API_ENDPOINTS, TORRENT_STATES } from '$lib/utils/constants';
 	import type { Torrent } from '$lib/types/torrent';
@@ -12,11 +12,9 @@
 	const { data } = $props<{ data: { torrents: Torrent[] } }>();
 	let magnet: string = $state('');
 	let torrents: Torrent[] = $state(data.torrents ?? []);
-	// let previousTorrents: Torrent[] = [];
 	let isLoading: boolean = $state(false);
 	let error: string | null = $state(null);
 	let processingTorrents: Set<string> = $state(new Set());
-
 	let selectedTorrent: Torrent | null = $state(null);
 
 	function showTorrentDetails(torrent: Torrent) {
@@ -248,13 +246,17 @@
 		}
 	}
 
-	// Инициализация при монтировании компонента
 	onMount(() => {
 		// Данные уже пришли через load (SSR/прелоад).
 		return () => {
 			unsubscribe();
 		};
 	});
+
+	onDestroy(() => {
+		unsubscribe();
+	});
+
 
 	// Handle keyboard events for torrent items
 	function handleTorrentKeydown(event: KeyboardEvent, torrent: Torrent) {
